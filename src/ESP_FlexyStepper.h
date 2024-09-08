@@ -71,6 +71,7 @@ public:
   bool isMovingTowardsHome(void);
   void emergencyStop(bool holdUntilReleased = false);
   void releaseEmergencyStop(void);
+  bool isEmergencyStopActive();
   void activateBrake(void);
   void deactivateBrake(void);
   bool isBrakeActive(void);

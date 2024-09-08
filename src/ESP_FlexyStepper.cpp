@@ -196,6 +196,11 @@ void ESP_FlexyStepper::releaseEmergencyStop()
   }
 }
 
+bool ESP_FlexyStepper::isEmergencyStopActive()
+{
+  return this->emergencyStopActive;
+}
+
 /**
  *  configure the direction in which to move to reach the home position
  *  Accepts 1 or -1 as allowed values. Other values will be ignored

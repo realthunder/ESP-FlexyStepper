@@ -620,6 +620,21 @@ float ESP_FlexyStepper::getCurrentVelocityInMillimetersPerSecond()
 access the acceleration/deceleration parameters set by user
 */
 
+float ESP_FlexyStepper::getConfiguredSpeedInStepsPerSecond()
+{
+  return desiredSpeed_InStepsPerSecond;
+}
+
+float ESP_FlexyStepper::getConfiguredSpeedInRevolutionsPerSecond()
+{
+  return desiredSpeed_InStepsPerSecond / stepsPerRevolution;
+}
+
+float ESP_FlexyStepper::getConfiguredSpeedInMillimetersPerSecond()
+{
+  return desiredSpeed_InStepsPerSecond / stepsPerMillimeter;
+}
+
 float ESP_FlexyStepper::getConfiguredAccelerationInStepsPerSecondPerSecond()
 {
   return acceleration_InStepsPerSecondPerSecond;

@@ -110,6 +110,10 @@ public:
   float getCurrentVelocityInRevolutionsPerSecond();
   float getCurrentVelocityInMillimetersPerSecond(void);
 
+  float getConfiguredSpeedInStepsPerSecond();
+  float getConfiguredSpeedInRevolutionsPerSecond();
+  float getConfiguredSpeedInMillimetersPerSecond();
+
   float getConfiguredAccelerationInStepsPerSecondPerSecond();
   float getConfiguredAccelerationInRevolutionsPerSecondPerSecond();
   float getConfiguredAccelerationInMillimetersPerSecondPerSecond();
@@ -165,7 +169,7 @@ public:
   static const byte ACTIVE_HIGH = 1;
   static const byte ACTIVE_LOW = 2;
 
-private:
+public:
   callbackFunction _homeReachedCallback = NULL;
   callbackFunction _limitTriggeredCallback = NULL;
   callbackFunction _emergencyStopTriggeredCallback = NULL;

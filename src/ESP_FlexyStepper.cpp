@@ -905,6 +905,7 @@ void ESP_FlexyStepper::setDecelerationInStepsPerSecondPerSecond(
  */
 void ESP_FlexyStepper::setCurrentPositionAsHomeAndStop()
 {
+  this->isJogging = false;
   this->isOnWayToHome = false;
   this->currentStepPeriod_InUS = 0.0;
   this->nextStepPeriod_InUS = 0.0;
@@ -930,6 +931,7 @@ void ESP_FlexyStepper::goToLimitAndSetAsHome(callbackFunction callbackFunctionFo
   {
     this->setTargetPositionInSteps(this->getCurrentPositionInSteps() + (this->directionTowardsHome * maxDistanceToMoveInSteps));
   }
+  this->isJogging = false;
   this->isOnWayToHome = true; // set as last action, since other functions might overwrite it
 }
 
@@ -944,6 +946,7 @@ void ESP_FlexyStepper::goToLimit(signed char direction, callbackFunction callbac
   {
     this->setTargetPositionInSteps(this->getCurrentPositionInSteps() + (this->directionTowardsHome * 2000000000));
   }
+  this->isJogging = false;
   this->isOnWayToLimit = true; // set as last action, since other functions might overwrite it
 }
 
@@ -997,6 +1000,7 @@ void ESP_FlexyStepper::registerEmergencyStopReleasedCallback(callbackFunction em
 void ESP_FlexyStepper::startJogging(signed char direction)
 {
   this->setTargetPositionInSteps(direction * 2000000000);
+  this->isJogging = true;
 }
 
 /**
@@ -1179,6 +1183,7 @@ void ESP_FlexyStepper::moveToPositionInSteps(long absolutePositionToMoveToInStep
 void ESP_FlexyStepper::setTargetPositionInSteps(long absolutePositionToMoveToInSteps)
 {
   // abort potentially running homing movement
+  this->isJogging = false;
   this->isOnWayToHome = false;
   this->isOnWayToLimit = false;
   targetPosition_InSteps = absolutePositionToMoveToInSteps;
@@ -1199,6 +1204,7 @@ long ESP_FlexyStepper::getTargetPositionInSteps()
 void ESP_FlexyStepper::setTargetPositionToStop()
 {
   // abort potentially running homing movement
+  this->isJogging = false;
   this->isOnWayToHome = false;
   this->isOnWayToLimit = false;
 
@@ -1231,6 +1237,7 @@ bool ESP_FlexyStepper::processMovement(void)
   if (emergencyStopActive)
   {
     // abort potentially running homing movement
+    this->isJogging = false;
     this->isOnWayToHome = false;
     this->isOnWayToLimit = false;
 

@@ -220,6 +220,7 @@ public:
   signed char lastStepDirectionBeforeLimitSwitchTrigger;
   // true if the current stepper position equals the homing position
   bool isCurrentlyHomed;
+  bool isJogging = false;
   bool isOnWayToHome = false;
   bool isOnWayToLimit = false;
   bool firstProcessingAfterTargetReached = false;

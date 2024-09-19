@@ -87,6 +87,7 @@ public:
   void registerTargetPositionReachedCallback(positionCallbackFunction targetPositionReachedCallbackFunction);
   void registerEmergencyStopTriggeredCallback(callbackFunction emergencyStopTriggerdCallbackFunction);
   void registerEmergencyStopReleasedCallback(callbackFunction emergencyStopReleasedCallbackFunction);
+  void registerStateChangedCallback(callbackFunction);
 
   // configuration functions
   void setStepsPerMillimeter(float motorStepPerMillimeter);
@@ -163,6 +164,8 @@ public:
   bool moveToHomeInMillimeters(signed char directionTowardHome, float speedInMillimetersPerSecond, long maxDistanceToMoveInMillimeters, int homeLimitSwitchPin);
   bool moveToHomeInRevolutions(signed char directionTowardHome, float speedInRevolutionsPerSecond, long maxDistanceToMoveInRevolutions, int homeLimitSwitchPin);
 
+  void changeState();
+
   static const signed char LIMIT_SWITCH_BEGIN = -1;
   static const signed char LIMIT_SWITCH_END = 1;
   static const signed char LIMIT_SWITCH_COMBINED_BEGIN_AND_END = 2;
@@ -176,6 +179,7 @@ public:
   callbackFunction _emergencyStopReleasedCallback = NULL;
   positionCallbackFunction _targetPositionReachedCallback = NULL;
   callbackFunction _callbackFunctionForGoToLimit = NULL;
+  callbackFunction _stateChangeCallback = NULL;
 
   static void taskRunner(void *parameter);
 

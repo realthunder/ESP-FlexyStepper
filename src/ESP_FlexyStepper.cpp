@@ -44,6 +44,7 @@
 // https://github.com/Stan-Reifel/FlexyStepper
 //
 
+#include <atomic>
 #include "ESP_FlexyStepper.h"
 
 //
@@ -51,6 +52,28 @@
 //
 #define POSITIVE_DIRECTION LOW
 #define NEGATIVE_DIRECTION HIGH
+
+namespace {
+
+static std::atomic<int> StateChangeCounter;
+class StateChanger
+{
+public:
+  StateChanger(ESP_FlexyStepper &host)
+    :_host(host)
+  {
+    ++StateChangeCounter;
+  }
+  ~StateChanger()
+  {
+    if (--StateChangeCounter == 0)
+      _host.changeState();
+  }
+private:
+  ESP_FlexyStepper &_host;
+};
+
+} //anonymous namespace
 
 // ---------------------------------------------------------------------------------
 //                                  Setup functions
@@ -176,6 +199,7 @@ long ESP_FlexyStepper::getDistanceToTargetSigned()
  */
 void ESP_FlexyStepper::emergencyStop(bool holdUntilReleased)
 {
+  StateChanger stateChange(*this);
   this->holdEmergencyStopUntilExplicitRelease = holdUntilReleased;
   this->emergencyStopActive = (!this->motionComplete() || this->holdEmergencyStopUntilExplicitRelease);
   if (this->_emergencyStopTriggeredCallback)
@@ -189,6 +213,7 @@ void ESP_FlexyStepper::emergencyStop(bool holdUntilReleased)
  */
 void ESP_FlexyStepper::releaseEmergencyStop()
 {
+  StateChanger stateChange(*this);
   this->emergencyStopActive = false;
   if (this->_emergencyStopReleasedCallback)
   {
@@ -223,6 +248,7 @@ void ESP_FlexyStepper::setLimitSwitchActive(signed char limitSwitchType)
 {
   if (limitSwitchType == LIMIT_SWITCH_BEGIN || limitSwitchType == LIMIT_SWITCH_END || limitSwitchType == LIMIT_SWITCH_COMBINED_BEGIN_AND_END)
   {
+    StateChanger stateChange(*this);
     this->activeLimitSwitch = limitSwitchType;
     this->limitSwitchCheckPeformed = false; // set flag for newly set limit switch trigger
     if (this->_limitTriggeredCallback)
@@ -392,6 +418,7 @@ void ESP_FlexyStepper::activateBrake()
 {
   if (this->_isBrakeConfigured)
   {
+    StateChanger stateChange(*this);
     digitalWrite((uint8_t)this->brakePin, (this->brakePinActiveState == ESP_FlexyStepper::ACTIVE_HIGH) ? 1 : 0);
     this->_isBrakeActive = true;
     this->_timeToEngangeBrake = LONG_MAX;
@@ -405,6 +432,7 @@ void ESP_FlexyStepper::deactivateBrake()
 {
   if (this->_isBrakeConfigured)
   {
+    StateChanger stateChange(*this);
     digitalWrite((uint8_t)this->brakePin, (this->brakePinActiveState == ESP_FlexyStepper::ACTIVE_HIGH) ? 0 : 1);
     this->_isBrakeActive = false;
     this->_timeToReleaseBrake = LONG_MAX;
@@ -426,6 +454,7 @@ void ESP_FlexyStepper::enableDriver(void)
 {
   if (this->_isEnableConfigured)
   {
+    StateChanger stateChange(*this);
     digitalWrite((uint8_t)this->enablePin, (this->enablePinActiveState == ESP_FlexyStepper::ACTIVE_HIGH) ? 1 : 0);
     this->_isDriverEnabled = true;
   }
@@ -438,6 +467,7 @@ void ESP_FlexyStepper::disableDriver(void)
 {
   if (this->_isEnableConfigured)
   {
+    StateChanger stateChange(*this);
     digitalWrite((uint8_t)this->enablePin, (this->enablePinActiveState == ESP_FlexyStepper::ACTIVE_HIGH) ? 0 : 1);
     this->_isDriverEnabled = false;
   }
@@ -457,6 +487,7 @@ bool ESP_FlexyStepper::isDriverEnabled(void)
 //
 void ESP_FlexyStepper::setStepsPerMillimeter(float motorStepsPerMillimeter)
 {
+  StateChanger stateChange(*this);
   stepsPerMillimeter = motorStepsPerMillimeter;
 }
 
@@ -674,6 +705,7 @@ float ESP_FlexyStepper::getConfiguredDecelerationInMillimetersPerSecondPerSecond
 //
 void ESP_FlexyStepper::setStepsPerRevolution(float motorStepPerRevolution)
 {
+  StateChanger stateChange(*this);
   stepsPerRevolution = motorStepPerRevolution;
 }
 
@@ -848,6 +880,7 @@ float ESP_FlexyStepper::getCurrentVelocityInRevolutionsPerSecond()
 //
 void ESP_FlexyStepper::setCurrentPositionInSteps(long currentPositionInSteps)
 {
+  StateChanger stateChange(*this);
   currentPosition_InSteps = currentPositionInSteps;
 }
 
@@ -868,6 +901,7 @@ long ESP_FlexyStepper::getCurrentPositionInSteps()
 //
 void ESP_FlexyStepper::setSpeedInStepsPerSecond(float speedInStepsPerSecond)
 {
+  StateChanger stateChange(*this);
   desiredSpeed_InStepsPerSecond = speedInStepsPerSecond;
   desiredPeriod_InUSPerStep = 1000000.0 / desiredSpeed_InStepsPerSecond;
 }
@@ -880,6 +914,7 @@ void ESP_FlexyStepper::setSpeedInStepsPerSecond(float speedInStepsPerSecond)
 void ESP_FlexyStepper::setAccelerationInStepsPerSecondPerSecond(
     float accelerationInStepsPerSecondPerSecond)
 {
+  StateChanger stateChange(*this);
   acceleration_InStepsPerSecondPerSecond = accelerationInStepsPerSecondPerSecond;
   acceleration_InStepsPerUSPerUS = acceleration_InStepsPerSecondPerSecond / 1E12;
 
@@ -896,6 +931,7 @@ void ESP_FlexyStepper::setAccelerationInStepsPerSecondPerSecond(
 void ESP_FlexyStepper::setDecelerationInStepsPerSecondPerSecond(
     float decelerationInStepsPerSecondPerSecond)
 {
+  StateChanger stateChange(*this);
   deceleration_InStepsPerSecondPerSecond = decelerationInStepsPerSecondPerSecond;
   deceleration_InStepsPerUSPerUS = deceleration_InStepsPerSecondPerSecond / 1E12;
 }
@@ -905,6 +941,7 @@ void ESP_FlexyStepper::setDecelerationInStepsPerSecondPerSecond(
  */
 void ESP_FlexyStepper::setCurrentPositionAsHomeAndStop()
 {
+  StateChanger stateChange(*this);
   this->isJogging = false;
   this->isOnWayToHome = false;
   this->currentStepPeriod_InUS = 0.0;
@@ -922,6 +959,7 @@ void ESP_FlexyStepper::setCurrentPositionAsHomeAndStop()
  */
 void ESP_FlexyStepper::goToLimitAndSetAsHome(callbackFunction callbackFunctionForHome, long maxDistanceToMoveInSteps)
 {
+  StateChanger stateChange(*this);
   if (callbackFunctionForHome)
   {
     this->_homeReachedCallback = callbackFunctionForHome;
@@ -937,6 +975,7 @@ void ESP_FlexyStepper::goToLimitAndSetAsHome(callbackFunction callbackFunctionFo
 
 void ESP_FlexyStepper::goToLimit(signed char direction, callbackFunction callbackFunctionForLimit)
 {
+  StateChanger stateChange(*this);
   if (callbackFunctionForLimit)
   {
     this->_callbackFunctionForGoToLimit = callbackFunctionForLimit;
@@ -972,6 +1011,14 @@ void ESP_FlexyStepper::registerLimitReachedCallback(callbackFunction limitSwitch
 void ESP_FlexyStepper::registerTargetPositionReachedCallback(positionCallbackFunction targetPositionReachedCallbackFunction)
 {
   this->_targetPositionReachedCallback = targetPositionReachedCallbackFunction;
+}
+
+/**
+ * register a callback function to be called whenever any state/position has changed
+ */
+void ESP_FlexyStepper::registerStateChangedCallback(callbackFunction callback)
+{
+  this->_stateChangeCallback = callback;
 }
 
 /**
@@ -1182,6 +1229,7 @@ void ESP_FlexyStepper::moveToPositionInSteps(long absolutePositionToMoveToInStep
 //
 void ESP_FlexyStepper::setTargetPositionInSteps(long absolutePositionToMoveToInSteps)
 {
+  StateChanger stateChange(*this);
   // abort potentially running homing movement
   this->isJogging = false;
   this->isOnWayToHome = false;
@@ -1203,6 +1251,7 @@ long ESP_FlexyStepper::getTargetPositionInSteps()
 //
 void ESP_FlexyStepper::setTargetPositionToStop()
 {
+  StateChanger stateChange(*this);
   // abort potentially running homing movement
   this->isJogging = false;
   this->isOnWayToHome = false;
@@ -1236,6 +1285,7 @@ bool ESP_FlexyStepper::processMovement(void)
 {
   if (emergencyStopActive)
   {
+    StateChanger stateChanger(*this);
     // abort potentially running homing movement
     this->isJogging = false;
     this->isOnWayToHome = false;
@@ -1307,6 +1357,7 @@ bool ESP_FlexyStepper::processMovement(void)
       // movement has been triggered by goToLimitAndSetAsHome() function. so once the limit switch has been triggered we have reached the limit and need to set it as home
       if (this->isOnWayToHome)
       {
+        StateChanger stateChange(*this);
         this->setCurrentPositionAsHomeAndStop(); // clear isOnWayToHome flag and stop motion
 
         if (this->_homeReachedCallback != NULL)
@@ -1327,6 +1378,7 @@ bool ESP_FlexyStepper::processMovement(void)
         (this->disallowedDirection == 1 && distanceToTarget_Signed > 0) ||
         (this->disallowedDirection == -1 && distanceToTarget_Signed < 0))
     {
+      StateChanger stateChange(*this);
       // limit switch is active and movement in request direction is not allowed
       currentStepPeriod_InUS = 0.0;
       nextStepPeriod_InUS = 0.0;
@@ -1353,6 +1405,7 @@ bool ESP_FlexyStepper::processMovement(void)
     // check if target position in a positive direction
     if (distanceToTarget_Signed > 0)
     {
+      StateChanger stateChange(*this);
       directionOfMotion = 1;
       digitalWrite(directionPin, POSITIVE_DIRECTION);
       nextStepPeriod_InUS = periodOfSlowestStep_InUS;
@@ -1364,6 +1417,7 @@ bool ESP_FlexyStepper::processMovement(void)
     // check if target position in a negative direction
     else if (distanceToTarget_Signed < 0)
     {
+      StateChanger stateChange(*this);
       directionOfMotion = -1;
       digitalWrite(directionPin, NEGATIVE_DIRECTION);
       nextStepPeriod_InUS = periodOfSlowestStep_InUS;
@@ -1377,6 +1431,7 @@ bool ESP_FlexyStepper::processMovement(void)
 
       if (this->firstProcessingAfterTargetReached)
       {
+        StateChanger stateChange(*this);
         firstProcessingAfterTargetReached = false;
         if (this->_targetPositionReachedCallback)
         {
@@ -1400,6 +1455,8 @@ bool ESP_FlexyStepper::processMovement(void)
   // if it is not time for the next step, return
   if (periodSinceLastStep_InUS < (unsigned long)nextStepPeriod_InUS)
     return (false);
+
+  StateChanger stateChange(*this);
 
   // we have to move, so deactivate brake (if configured at all) immediately
   if (this->_isBrakeConfigured && this->_isBrakeActive)
@@ -1656,6 +1713,12 @@ void ESP_FlexyStepper::DeterminePeriodOfNextStep()
     if (nextStepPeriod_InUS > periodOfSlowestStep_InUS)
       nextStepPeriod_InUS = periodOfSlowestStep_InUS;
   }
+}
+
+void ESP_FlexyStepper::changeState()
+{
+  if (_stateChangeCallback)
+    _stateChangeCallback();
 }
 
 // -------------------------------------- End --------------------------------------

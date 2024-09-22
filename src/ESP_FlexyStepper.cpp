@@ -135,7 +135,7 @@ bool ESP_FlexyStepper::startAsService(int coreNumber)
   xTaskCreatePinnedToCore(
       ESP_FlexyStepper::taskRunner, /* Task function. */
       "FlexyStepper",               /* String with name of task (by default max 16 characters long) */
-      2000,                         /* Stack size in bytes. */
+      4096,                         /* Stack size in bytes. */
       this,                         /* Parameter passed as input of the task */
       1,                            /* Priority of the task, 1 seems to work just fine for us */
       &this->xHandle,               /* Task handle. */

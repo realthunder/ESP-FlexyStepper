@@ -1022,6 +1022,14 @@ void ESP_FlexyStepper::registerStateChangedCallback(callbackFunction callback)
 }
 
 /**
+ * register a callback function to be called before processMovement
+ */
+void ESP_FlexyStepper::registerBeforeMovementCallback(callbackFunction callback)
+{
+  this->_beforeMovementCallback = callback;
+}
+
+/**
  * register a callback function to be called whenever a emergency stop is triggered
  */
 void ESP_FlexyStepper::registerEmergencyStopTriggeredCallback(callbackFunction emergencyStopTriggerdCallbackFunction)
@@ -1283,6 +1291,9 @@ void ESP_FlexyStepper::setTargetPositionToStop()
 //
 bool ESP_FlexyStepper::processMovement(void)
 {
+  if (_beforeMovementCallback)
+    _beforeMovementCallback();
+
   if (emergencyStopActive)
   {
     StateChanger stateChanger(*this);

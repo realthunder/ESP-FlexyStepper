@@ -88,6 +88,7 @@ public:
   void registerEmergencyStopTriggeredCallback(callbackFunction emergencyStopTriggerdCallbackFunction);
   void registerEmergencyStopReleasedCallback(callbackFunction emergencyStopReleasedCallbackFunction);
   void registerStateChangedCallback(callbackFunction);
+  void registerBeforeMovementCallback(callbackFunction);
 
   // configuration functions
   void setStepsPerMillimeter(float motorStepPerMillimeter);
@@ -180,6 +181,7 @@ public:
   positionCallbackFunction _targetPositionReachedCallback = NULL;
   callbackFunction _callbackFunctionForGoToLimit = NULL;
   callbackFunction _stateChangeCallback = NULL;
+  callbackFunction _beforeMovementCallback = NULL;
 
   static void taskRunner(void *parameter);
 

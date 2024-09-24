@@ -91,6 +91,7 @@ ESP_FlexyStepper::ESP_FlexyStepper()
   this->currentPosition_InSteps = 0L;
   this->targetPosition_InSteps = 0L;
   this->setSpeedInStepsPerSecond(200);
+  this->setHomingSpeedInStepsPerSecond(100);
   this->setAccelerationInStepsPerSecondPerSecond(200.0);
   this->setDecelerationInStepsPerSecondPerSecond(200.0);
   this->currentStepPeriod_InUS = 0.0;
@@ -525,6 +526,12 @@ void ESP_FlexyStepper::setSpeedInMillimetersPerSecond(float speedInMillimetersPe
   setSpeedInStepsPerSecond(speedInMillimetersPerSecond * stepsPerMillimeter);
 }
 
+void ESP_FlexyStepper::setHomingSpeedInMillimetersPerSecond(float speedInMillimetersPerSecond)
+{
+  setHomingSpeedInStepsPerSecond(speedInMillimetersPerSecond * stepsPerMillimeter);
+}
+
+
 //
 // set the rate of acceleration, units in millimeters/second/second
 //  Enter:  accelerationInMillimetersPerSecondPerSecond = rate of acceleration,
@@ -906,6 +913,13 @@ void ESP_FlexyStepper::setSpeedInStepsPerSecond(float speedInStepsPerSecond)
   desiredPeriod_InUSPerStep = 1000000.0 / desiredSpeed_InStepsPerSecond;
 }
 
+void ESP_FlexyStepper::setHomingSpeedInStepsPerSecond(float speedInStepsPerSecond)
+{
+  StateChanger stateChange(*this);
+  desiredHomingSpeed_InStepsPerSecond = speedInStepsPerSecond;
+  desiredHomingPeriod_InUSPerStep = 1000000.0 / desiredHomingSpeed_InStepsPerSecond;
+}
+
 //
 // set the rate of acceleration, units in steps/second/second
 //  Enter:  accelerationInStepsPerSecondPerSecond = rate of acceleration, units in
@@ -943,7 +957,7 @@ void ESP_FlexyStepper::setCurrentPositionAsHomeAndStop()
 {
   StateChanger stateChange(*this);
   this->isJogging = false;
-  this->isOnWayToHome = false;
+  this->isOnWayToHome = 0;
   this->currentStepPeriod_InUS = 0.0;
   this->nextStepPeriod_InUS = 0.0;
   this->directionOfMotion = 0;
@@ -970,7 +984,7 @@ void ESP_FlexyStepper::goToLimitAndSetAsHome(callbackFunction callbackFunctionFo
     this->setTargetPositionInSteps(this->getCurrentPositionInSteps() + (this->directionTowardsHome * maxDistanceToMoveInSteps));
   }
   this->isJogging = false;
-  this->isOnWayToHome = true; // set as last action, since other functions might overwrite it
+  this->isOnWayToHome = 1; // set as last action, since other functions might overwrite it
 }
 
 void ESP_FlexyStepper::goToLimit(signed char direction, callbackFunction callbackFunctionForLimit)
@@ -1240,7 +1254,7 @@ void ESP_FlexyStepper::setTargetPositionInSteps(long absolutePositionToMoveToInS
   StateChanger stateChange(*this);
   // abort potentially running homing movement
   this->isJogging = false;
-  this->isOnWayToHome = false;
+  this->isOnWayToHome = 0;
   this->isOnWayToLimit = false;
   targetPosition_InSteps = absolutePositionToMoveToInSteps;
   this->firstProcessingAfterTargetReached = true;
@@ -1262,7 +1276,7 @@ void ESP_FlexyStepper::setTargetPositionToStop()
   StateChanger stateChange(*this);
   // abort potentially running homing movement
   this->isJogging = false;
-  this->isOnWayToHome = false;
+  this->isOnWayToHome = 0;
   this->isOnWayToLimit = false;
 
   if (directionOfMotion == 0)
@@ -1299,7 +1313,7 @@ bool ESP_FlexyStepper::processMovement(void)
     StateChanger stateChanger(*this);
     // abort potentially running homing movement
     this->isJogging = false;
-    this->isOnWayToHome = false;
+    this->isOnWayToHome = 0;
     this->isOnWayToLimit = false;
 
     currentStepPeriod_InUS = 0.0;
@@ -1366,21 +1380,15 @@ bool ESP_FlexyStepper::processMovement(void)
       }
 
       // movement has been triggered by goToLimitAndSetAsHome() function. so once the limit switch has been triggered we have reached the limit and need to set it as home
-      if (this->isOnWayToHome)
+      if (this->isOnWayToHome == 1)
       {
         StateChanger stateChange(*this);
-        this->setCurrentPositionAsHomeAndStop(); // clear isOnWayToHome flag and stop motion
-
-        if (this->_homeReachedCallback != NULL)
-        {
-          this->_homeReachedCallback();
-        }
-        // activate brake (or schedule activation) since we reached the final position
-        if (this->_isBrakeConfigured && !this->_isBrakeActive)
-        {
-          this->triggerBrakeIfNeededOrSetTimeout();
-        }
-        return true;
+        //
+        // the switch has been detected, now move away from the switch
+        //
+        this->isOnWayToHome = 2;
+        this->targetPosition_InSteps = -this->targetPosition_InSteps;
+        return false;
       }
     }
 
@@ -1402,6 +1410,21 @@ bool ESP_FlexyStepper::processMovement(void)
       }
       return true;
     }
+  }
+  else if (this->isOnWayToHome > 1) {
+    StateChanger stateChange(*this);
+    this->setCurrentPositionAsHomeAndStop(); // clear isOnWayToHome flag and stop motion
+
+    if (this->_homeReachedCallback != NULL)
+    {
+      this->_homeReachedCallback();
+    }
+    // activate brake (or schedule activation) since we reached the final position
+    if (this->_isBrakeConfigured && !this->_isBrakeActive)
+    {
+      this->triggerBrakeIfNeededOrSetTimeout();
+    }
+    return true;
   }
 
   unsigned long currentTime_InUS;
@@ -1597,6 +1620,7 @@ void ESP_FlexyStepper::DeterminePeriodOfNextStep()
   bool slowDownFlag = false;
   bool targetInPositiveDirectionFlag = false;
   bool targetInNegativeDirectionFlag = false;
+  float periodInUS = this->isOnWayToHome == 2 ? desiredHomingPeriod_InUSPerStep : desiredPeriod_InUSPerStep;
 
   //
   // determine the distance to the target position
@@ -1632,7 +1656,7 @@ void ESP_FlexyStepper::DeterminePeriodOfNextStep()
     // need to slow down because we are going too fast
     //
     if ((distanceToTarget_Unsigned < decelerationDistance_InSteps) ||
-        (nextStepPeriod_InUS < desiredPeriod_InUSPerStep))
+        (nextStepPeriod_InUS < periodInUS))
       slowDownFlag = true;
     else
       speedUpFlag = true;
@@ -1669,7 +1693,7 @@ void ESP_FlexyStepper::DeterminePeriodOfNextStep()
     // need to slow down because we are going too fast
     //
     if ((distanceToTarget_Unsigned < decelerationDistance_InSteps) ||
-        (nextStepPeriod_InUS < desiredPeriod_InUSPerStep))
+        (nextStepPeriod_InUS < periodInUS))
       slowDownFlag = true;
     else
       speedUpFlag = true;
@@ -1706,8 +1730,8 @@ void ESP_FlexyStepper::DeterminePeriodOfNextStep()
     nextStepPeriod_InUS = currentStepPeriod_InUS - acceleration_InStepsPerUSPerUS *
                                                        currentStepPeriodSquared * currentStepPeriod_InUS;
 
-    if (nextStepPeriod_InUS < desiredPeriod_InUSPerStep)
-      nextStepPeriod_InUS = desiredPeriod_InUSPerStep;
+    if (nextStepPeriod_InUS < periodInUS)
+      nextStepPeriod_InUS = periodInUS;
   }
 
   //

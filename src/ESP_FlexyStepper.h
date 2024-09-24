@@ -96,6 +96,8 @@ public:
   void setSpeedInStepsPerSecond(float speedInStepsPerSecond);
   void setSpeedInMillimetersPerSecond(float speedInMillimetersPerSecond);
   void setSpeedInRevolutionsPerSecond(float speedInRevolutionsPerSecond);
+  void setHomingSpeedInStepsPerSecond(float speedInStepsPerSecond);
+  void setHomingSpeedInMillimetersPerSecond(float speedInMillimetersPerSecond);
   void setAccelerationInMillimetersPerSecondPerSecond(float accelerationInMillimetersPerSecondPerSecond);
   void setAccelerationInRevolutionsPerSecondPerSecond(float accelerationInRevolutionsPerSecondPerSecond);
   void setDecelerationInMillimetersPerSecondPerSecond(float decelerationInMillimetersPerSecondPerSecond);
@@ -209,6 +211,8 @@ public:
   int directionOfMotion;
   long currentPosition_InSteps;
   long targetPosition_InSteps;
+  float desiredHomingSpeed_InStepsPerSecond;
+  float desiredHomingPeriod_InUSPerStep;
   float desiredSpeed_InStepsPerSecond;
   float desiredPeriod_InUSPerStep;
   float acceleration_InStepsPerSecondPerSecond;
@@ -227,7 +231,7 @@ public:
   // true if the current stepper position equals the homing position
   bool isCurrentlyHomed;
   bool isJogging = false;
-  bool isOnWayToHome = false;
+  uint8_t isOnWayToHome = 0;
   bool isOnWayToLimit = false;
   bool firstProcessingAfterTargetReached = false;
   // The type ID of the limit switch type that is active. possible values are LIMIT_SWITCH_BEGIN (-1) or LIMIT_SWITCH_END (1) or LIMIT_SWITCH_COMBINED_BEGIN_AND_END (2) or 0 if no limit switch is active

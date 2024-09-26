@@ -55,22 +55,54 @@
 
 namespace {
 
+class MutexLock
+{
+public:
+  MutexLock(ESP_FlexyStepper &host)
+    :_host(host), _released(false)
+  {
+    portENTER_CRITICAL(&_host._lock);
+  }
+
+  ~MutexLock()
+  {
+    release();
+  }
+
+  void release()
+  {
+    if(!_released) {
+      _released = true;
+      portEXIT_CRITICAL(&_host._lock);
+    }
+  }
+
+
+private:
+  ESP_FlexyStepper &_host;
+  bool _released;
+};
+
 static std::atomic<int> StateChangeCounter;
 class StateChanger
 {
 public:
-  StateChanger(ESP_FlexyStepper &host)
-    :_host(host)
+  StateChanger(ESP_FlexyStepper &host, MutexLock *lock=NULL)
+    :_host(host), _lock(lock)
   {
     ++StateChangeCounter;
   }
   ~StateChanger()
   {
-    if (--StateChangeCounter == 0)
+    if (--StateChangeCounter == 0) {
+      if (_lock)
+        _lock->release();
       _host.changeState();
+    }
   }
 private:
   ESP_FlexyStepper &_host;
+  MutexLock *_lock;
 };
 
 } //anonymous namespace
@@ -264,7 +296,10 @@ void ESP_FlexyStepper::setLimitSwitchActive(signed char limitSwitchType)
  */
 void ESP_FlexyStepper::clearLimitSwitchActive()
 {
-  this->activeLimitSwitch = 0;
+  if (this->activeLimitSwitch) {
+    StateChanger stateChange(*this);
+    this->activeLimitSwitch = 0;
+  }
 }
 
 /**
@@ -363,6 +398,7 @@ void ESP_FlexyStepper::setBrakePin(signed char brakePin, byte activeState)
  */
 void ESP_FlexyStepper::setEnablePin(signed char enablePin, byte activeState)
 {
+  StateChanger stateChange(*this);
   this->enablePin = enablePin;
   if (activeState == ESP_FlexyStepper::ACTIVE_HIGH || activeState == ESP_FlexyStepper::ACTIVE_LOW)
   {
@@ -974,17 +1010,23 @@ void ESP_FlexyStepper::setCurrentPositionAsHomeAndStop()
 void ESP_FlexyStepper::goToLimitAndSetAsHome(callbackFunction callbackFunctionForHome, long maxDistanceToMoveInSteps)
 {
   StateChanger stateChange(*this);
+  MutexLock lock(*this);
   if (callbackFunctionForHome)
   {
     this->_homeReachedCallback = callbackFunctionForHome;
   }
+  long maxDistanceToHome = this->getCurrentPositionInSteps() + (this->directionTowardsHome * maxDistanceToMoveInSteps);
   // the second check basically utilizes the fact the the begin and end limit switch id is 1 respectively -1 so the values are the same as the direction of the movement when the steppers moves towards of of the limits
   if (this->activeLimitSwitch == 0 || this->activeLimitSwitch != this->directionTowardsHome)
   {
-    this->setTargetPositionInSteps(this->getCurrentPositionInSteps() + (this->directionTowardsHome * maxDistanceToMoveInSteps));
+    this->setTargetPositionInSteps(maxDistanceToHome);
+    this->isOnWayToHome = 1; // set as last action, since other functions might overwrite it
+  }
+  else {
+    this->setTargetPositionInSteps(-maxDistanceToHome);
+    this->isOnWayToHome = 2; // set as last action, since other functions might overwrite it
   }
   this->isJogging = false;
-  this->isOnWayToHome = 1; // set as last action, since other functions might overwrite it
 }
 
 void ESP_FlexyStepper::goToLimit(signed char direction, callbackFunction callbackFunctionForLimit)
@@ -1252,6 +1294,7 @@ void ESP_FlexyStepper::moveToPositionInSteps(long absolutePositionToMoveToInStep
 void ESP_FlexyStepper::setTargetPositionInSteps(long absolutePositionToMoveToInSteps)
 {
   StateChanger stateChange(*this);
+  MutexLock lock(*this);
   // abort potentially running homing movement
   this->isJogging = false;
   this->isOnWayToHome = 0;
@@ -1274,6 +1317,7 @@ long ESP_FlexyStepper::getTargetPositionInSteps()
 void ESP_FlexyStepper::setTargetPositionToStop()
 {
   StateChanger stateChange(*this);
+  MutexLock lock(*this);
   // abort potentially running homing movement
   this->isJogging = false;
   this->isOnWayToHome = 0;
@@ -1308,9 +1352,10 @@ bool ESP_FlexyStepper::processMovement(void)
   if (_beforeMovementCallback)
     _beforeMovementCallback();
 
+  MutexLock lock(*this);
   if (emergencyStopActive)
   {
-    StateChanger stateChanger(*this);
+    StateChanger stateChanger(*this, &lock);
     // abort potentially running homing movement
     this->isJogging = false;
     this->isOnWayToHome = 0;
@@ -1378,18 +1423,18 @@ bool ESP_FlexyStepper::processMovement(void)
           this->disallowedDirection = -1;
         }
       }
+    }
 
-      // movement has been triggered by goToLimitAndSetAsHome() function. so once the limit switch has been triggered we have reached the limit and need to set it as home
-      if (this->isOnWayToHome == 1)
-      {
-        StateChanger stateChange(*this);
-        //
-        // the switch has been detected, now move away from the switch
-        //
-        this->isOnWayToHome = 2;
-        this->targetPosition_InSteps = -this->targetPosition_InSteps;
-        return false;
-      }
+    // movement has been triggered by goToLimitAndSetAsHome() function. so once the limit switch has been triggered we have reached the limit and need to set it as home
+    if (this->isOnWayToHome == 1)
+    {
+      StateChanger stateChange(*this, &lock);
+      //
+      // the switch has been detected, now move away from the switch
+      //
+      this->isOnWayToHome = 2;
+      this->targetPosition_InSteps = -this->targetPosition_InSteps;
+      return false;
     }
 
     // check if further movement is allowed
@@ -1397,7 +1442,7 @@ bool ESP_FlexyStepper::processMovement(void)
         (this->disallowedDirection == 1 && distanceToTarget_Signed > 0) ||
         (this->disallowedDirection == -1 && distanceToTarget_Signed < 0))
     {
-      StateChanger stateChange(*this);
+      StateChanger stateChange(*this, &lock);
       // limit switch is active and movement in request direction is not allowed
       currentStepPeriod_InUS = 0.0;
       nextStepPeriod_InUS = 0.0;
@@ -1412,11 +1457,12 @@ bool ESP_FlexyStepper::processMovement(void)
     }
   }
   else if (this->isOnWayToHome > 1) {
-    StateChanger stateChange(*this);
+    StateChanger stateChange(*this, &lock);
     this->setCurrentPositionAsHomeAndStop(); // clear isOnWayToHome flag and stop motion
 
     if (this->_homeReachedCallback != NULL)
     {
+      lock.release();
       this->_homeReachedCallback();
     }
     // activate brake (or schedule activation) since we reached the final position
@@ -1439,7 +1485,7 @@ bool ESP_FlexyStepper::processMovement(void)
     // check if target position in a positive direction
     if (distanceToTarget_Signed > 0)
     {
-      StateChanger stateChange(*this);
+      StateChanger stateChange(*this, &lock);
       directionOfMotion = 1;
       digitalWrite(directionPin, POSITIVE_DIRECTION);
       nextStepPeriod_InUS = periodOfSlowestStep_InUS;
@@ -1451,7 +1497,7 @@ bool ESP_FlexyStepper::processMovement(void)
     // check if target position in a negative direction
     else if (distanceToTarget_Signed < 0)
     {
-      StateChanger stateChange(*this);
+      StateChanger stateChange(*this, &lock);
       directionOfMotion = -1;
       digitalWrite(directionPin, NEGATIVE_DIRECTION);
       nextStepPeriod_InUS = periodOfSlowestStep_InUS;
@@ -1465,10 +1511,11 @@ bool ESP_FlexyStepper::processMovement(void)
 
       if (this->firstProcessingAfterTargetReached)
       {
-        StateChanger stateChange(*this);
+        StateChanger stateChange(*this, &lock);
         firstProcessingAfterTargetReached = false;
         if (this->_targetPositionReachedCallback)
         {
+          lock.release();
           this->_targetPositionReachedCallback(currentPosition_InSteps);
         }
       }
@@ -1490,7 +1537,7 @@ bool ESP_FlexyStepper::processMovement(void)
   if (periodSinceLastStep_InUS < (unsigned long)nextStepPeriod_InUS)
     return (false);
 
-  StateChanger stateChange(*this);
+  StateChanger stateChange(*this, &lock);
 
   // we have to move, so deactivate brake (if configured at all) immediately
   if (this->_isBrakeConfigured && this->_isBrakeActive)
@@ -1533,6 +1580,7 @@ bool ESP_FlexyStepper::processMovement(void)
         firstProcessingAfterTargetReached = false;
         if (this->_targetPositionReachedCallback)
         {
+          lock.release();
           this->_targetPositionReachedCallback(currentPosition_InSteps);
         }
         // activate brake since we reached the final position

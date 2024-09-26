@@ -240,6 +240,8 @@ public:
   // 0 if the the stepper is allowed to move in both directions (e.g. no limit or homing switch triggered), otherwise indicated which direction is currently not allowed for further movement
   signed char disallowedDirection;
 
+  portMUX_TYPE _lock = portMUX_INITIALIZER_UNLOCKED;
+
   TaskHandle_t xHandle = NULL;
 };
 
